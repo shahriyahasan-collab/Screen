@@ -1,0 +1,5 @@
+{
+  "name": "VibeCheck",
+  "description": "A simple haptic feedback tool that turns your device into a vibration tester using the Web Vibration API.",
+  "requestFramePermissions": []
+}
