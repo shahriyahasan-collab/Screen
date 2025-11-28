@@ -44,42 +44,56 @@ const App: React.FC = () => {
     const pattern = VIBRATION_PATTERNS.find(p => p.id === selectedPatternId);
     if (!pattern) return;
 
-    setIsVibrating(true);
-
-    const playSequence = () => {
-      let sequence = pattern.sequence;
-
-      // Special handling for Random mode
+    // Helper to generate sequence (needed for random mode)
+    const getSequence = () => {
       if (pattern.id === 'random') {
-        sequence = Array.from({ length: 10 }, () => Math.floor(Math.random() * 400) + 50);
+        return Array.from({ length: 10 }, () => Math.floor(Math.random() * 400) + 50);
       }
-      
-      // Fallback for empty sequence
-      if (sequence.length === 0) sequence = [200];
-
-      // Execute vibration
-      try {
-        navigator.vibrate(sequence);
-      } catch (e) {
-        console.error("Vibration failed or blocked", e);
-      }
-
-      // Loop logic
-      // We need to schedule the next loop. 
-      // Note: navigator.vibrate cancels previous calls, so we just call it again after duration.
-      
-      const duration = getPatternDuration(sequence);
-      
-      timerRef.current = window.setTimeout(playSequence, duration > 0 ? duration : 100);
+      return pattern.sequence.length > 0 ? pattern.sequence : [200];
     };
 
-    playSequence();
+    // Recursive function for looping vibration
+    const runVibrationLoop = () => {
+      const sequence = getSequence();
+      
+      // Execute vibration
+      // In the loop, we don't strictly check return value as the first one passed,
+      // and cancelling loop on partial failure might be jittery.
+      navigator.vibrate(sequence);
+
+      const duration = getPatternDuration(sequence);
+      timerRef.current = window.setTimeout(runVibrationLoop, duration > 0 ? duration : 100);
+    };
+
+    // --- CRITICAL FIX ---
+    // Attempt the first vibration immediately and CHECK RESULT.
+    // navigator.vibrate returns false if the user hasn't interacted with the page yet (Chrome/Android security).
+    const initialSequence = getSequence();
+    const success = navigator.vibrate(initialSequence);
+
+    if (!success) {
+      // If browser blocked it, DO NOT set state to true. 
+      // This fixes the "Shows running but not vibrating" bug.
+      console.warn("Vibration blocked by browser policy. Waiting for user interaction.");
+      setIsVibrating(false);
+      return;
+    }
+
+    // Only if successful do we update UI and start the loop
+    setIsVibrating(true);
+    
+    // Schedule next loop
+    const duration = getPatternDuration(initialSequence);
+    timerRef.current = window.setTimeout(runVibrationLoop, duration > 0 ? duration : 100);
+
   }, [selectedPatternId]);
 
   // Auto-start effect
   useEffect(() => {
     if (!hasTriedAutoStart.current && isSupported) {
       hasTriedAutoStart.current = true;
+      // We attempt to start. If browser allows (rare on mobile without interaction), it works.
+      // If browser blocks, startVibration checks return value and keeps UI as "OFF".
       startVibration();
     }
   }, [isSupported, startVibration]);
