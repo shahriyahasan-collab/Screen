@@ -1,11 +1,19 @@
 // Service Worker for PWA support
-const CACHE_NAME = 'vibecheck-v3';
-// We only cache the root and critical assets. 
-// We remove explicit './index.html' to avoid 404s if the server serves root only.
+const CACHE_NAME = 'vibecheck-v4';
+// We explicitly cache all source files because the PWA relies on browser-side
+// Babel transpilation. If any of these are missing, the app will crash offline.
 const urlsToCache = [
   './',
+  './index.html',
+  './manifest.json',
   './index.tsx',
-  './manifest.json'
+  './App.tsx',
+  './types.ts',
+  './constants.ts',
+  './components/PatternCard.tsx',
+  './components/VibrateButton.tsx',
+  'https://unpkg.com/@babel/standalone/babel.min.js',
+  'https://cdn.tailwindcss.com'
 ];
 
 self.addEventListener('install', (event) => {
@@ -24,12 +32,11 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Navigation fallback: If the user navigates to the app (e.g. opening it),
-  // serve the cached root content (index.html) even if they ask for something specific.
+  // Navigation fallback
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      caches.match('./').then((response) => {
-        return response || fetch(event.request);
+      caches.match('./index.html').then((response) => {
+        return response || fetch(event.request).catch(() => caches.match('./index.html'));
       })
     );
     return;
@@ -37,6 +44,7 @@ self.addEventListener('fetch', (event) => {
 
   event.respondWith(
     caches.match(event.request).then((response) => {
+      // Return cached response if found, otherwise fetch from network
       return response || fetch(event.request);
     })
   );

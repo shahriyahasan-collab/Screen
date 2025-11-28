@@ -1,4 +1,4 @@
-import { VibrationPattern } from './types';
+import { VibrationPattern } from './types.ts';
 
 export const VIBRATION_PATTERNS: VibrationPattern[] = [
   {

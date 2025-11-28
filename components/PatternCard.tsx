@@ -1,5 +1,5 @@
 import React from 'react';
-import { VibrationPattern } from '../types';
+import { VibrationPattern } from '../types.ts';
 import { Activity, Zap, Heart, Radio, AlertCircle, Shuffle } from 'lucide-react';
 
 interface PatternCardProps {

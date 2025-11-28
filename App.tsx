@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { VIBRATION_PATTERNS } from './constants';
-import PatternCard from './components/PatternCard';
-import VibrateButton from './components/VibrateButton';
+import { VIBRATION_PATTERNS } from './constants.ts';
+import PatternCard from './components/PatternCard.tsx';
+import VibrateButton from './components/VibrateButton.tsx';
 import { Smartphone, AlertTriangle, Info } from 'lucide-react';
 
 const App: React.FC = () => {
