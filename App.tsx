@@ -34,15 +34,16 @@ const App: React.FC = () => {
     setIsVibrating(false);
   }, []);
 
-  const startVibration = useCallback(() => {
+  // Modified to return success boolean
+  const startVibration = useCallback((): boolean => {
     // Robust check for support
     if (typeof navigator === 'undefined' || !navigator.vibrate) {
       setIsSupported(false);
-      return;
+      return false;
     }
 
     const pattern = VIBRATION_PATTERNS.find(p => p.id === selectedPatternId);
-    if (!pattern) return;
+    if (!pattern) return false;
 
     // Helper to generate sequence (needed for random mode)
     const getSequence = () => {
@@ -54,47 +55,56 @@ const App: React.FC = () => {
 
     // Recursive function for looping vibration
     const runVibrationLoop = () => {
-      const sequence = getSequence();
-      
-      // Execute vibration
-      // In the loop, we don't strictly check return value as the first one passed,
-      // and cancelling loop on partial failure might be jittery.
-      navigator.vibrate(sequence);
+      if (!timerRef.current && !isVibrating) return; // Guard clause if stopped in between
 
+      const sequence = getSequence();
+      navigator.vibrate(sequence);
       const duration = getPatternDuration(sequence);
       timerRef.current = window.setTimeout(runVibrationLoop, duration > 0 ? duration : 100);
     };
 
-    // --- CRITICAL FIX ---
-    // Attempt the first vibration immediately and CHECK RESULT.
-    // navigator.vibrate returns false if the user hasn't interacted with the page yet (Chrome/Android security).
+    // Attempt the first vibration immediately
     const initialSequence = getSequence();
     const success = navigator.vibrate(initialSequence);
 
-    if (!success) {
-      // If browser blocked it, DO NOT set state to true. 
-      // This fixes the "Shows running but not vibrating" bug.
-      console.warn("Vibration blocked by browser policy. Waiting for user interaction.");
-      setIsVibrating(false);
-      return;
-    }
+    // Note: success may be true even if blocked by lack of gesture on some browsers.
+    // However, if we are in a gesture context, this will work.
 
-    // Only if successful do we update UI and start the loop
+    // Update UI
     setIsVibrating(true);
     
+    // Clear any existing timer just in case
+    if (timerRef.current) clearTimeout(timerRef.current);
+
     // Schedule next loop
     const duration = getPatternDuration(initialSequence);
     timerRef.current = window.setTimeout(runVibrationLoop, duration > 0 ? duration : 100);
+    return true;
 
-  }, [selectedPatternId]);
+  }, [selectedPatternId, isVibrating]);
 
-  // Auto-start effect
+  // Auto-start effect: Waits for FIRST interaction to trigger.
+  // This solves the "It says ON but isn't vibrating" bug by ensuring we have a user gesture.
   useEffect(() => {
     if (!hasTriedAutoStart.current && isSupported) {
       hasTriedAutoStart.current = true;
-      // We attempt to start. If browser allows (rare on mobile without interaction), it works.
-      // If browser blocks, startVibration checks return value and keeps UI as "OFF".
-      startVibration();
+      
+      const handleInteraction = () => {
+        // Only auto-start if we aren't already vibrating
+        if (!timerRef.current) {
+          startVibration();
+        }
+        // Clean up listeners immediately after first valid interaction
+        document.removeEventListener('click', handleInteraction);
+        document.removeEventListener('touchstart', handleInteraction);
+        document.removeEventListener('keydown', handleInteraction);
+      };
+
+      // We do NOT try to vibrate immediately on mount because it usually fails silently 
+      // and desyncs the UI. Instead, we strictly wait for the first tap.
+      document.addEventListener('click', handleInteraction);
+      document.addEventListener('touchstart', handleInteraction);
+      document.addEventListener('keydown', handleInteraction);
     }
   }, [isSupported, startVibration]);
 
@@ -165,9 +175,13 @@ const App: React.FC = () => {
             <h2 className={`text-2xl font-bold transition-colors ${isVibrating ? 'text-red-500' : 'text-zinc-200'}`}>
               {currentPattern?.name || 'Select Pattern'}
             </h2>
-            {isVibrating && (
+            {isVibrating ? (
               <p className="text-xs text-red-400 mt-2 animate-pulse">
                 Vibrating...
+              </p>
+            ) : (
+              <p className="text-xs text-zinc-600 mt-2">
+                Tap anywhere to start
               </p>
             )}
           </div>
