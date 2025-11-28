@@ -9,6 +9,7 @@ const App: React.FC = () => {
   const [isVibrating, setIsVibrating] = useState<boolean>(false);
   const [selectedPatternId, setSelectedPatternId] = useState<string>('continuous');
   const timerRef = useRef<number | null>(null);
+  const hasTriedAutoStart = useRef<boolean>(false);
 
   useEffect(() => {
     // Check for vibration support
@@ -23,7 +24,7 @@ const App: React.FC = () => {
   };
 
   const stopVibration = useCallback(() => {
-    if (navigator.vibrate) {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
       navigator.vibrate(0);
     }
     if (timerRef.current) {
@@ -34,7 +35,11 @@ const App: React.FC = () => {
   }, []);
 
   const startVibration = useCallback(() => {
-    if (!isSupported) return;
+    // Robust check for support
+    if (typeof navigator === 'undefined' || !navigator.vibrate) {
+      setIsSupported(false);
+      return;
+    }
 
     const pattern = VIBRATION_PATTERNS.find(p => p.id === selectedPatternId);
     if (!pattern) return;
@@ -53,23 +58,31 @@ const App: React.FC = () => {
       if (sequence.length === 0) sequence = [200];
 
       // Execute vibration
-      navigator.vibrate(sequence);
+      try {
+        navigator.vibrate(sequence);
+      } catch (e) {
+        console.error("Vibration failed or blocked", e);
+      }
 
       // Loop logic
       // We need to schedule the next loop. 
       // Note: navigator.vibrate cancels previous calls, so we just call it again after duration.
-      // However, browsers have limits. Continuous loops are best handled by re-triggering.
       
       const duration = getPatternDuration(sequence);
-      // Add a small buffer to ensure the previous pattern finished effectively in the browser queue logic
-      // or to prevent overlap if the browser clips it. 
-      // For continuous (one long vibration), we just re-trigger.
       
       timerRef.current = window.setTimeout(playSequence, duration > 0 ? duration : 100);
     };
 
     playSequence();
-  }, [isSupported, selectedPatternId]);
+  }, [selectedPatternId]);
+
+  // Auto-start effect
+  useEffect(() => {
+    if (!hasTriedAutoStart.current && isSupported) {
+      hasTriedAutoStart.current = true;
+      startVibration();
+    }
+  }, [isSupported, startVibration]);
 
   const toggleVibration = () => {
     if (isVibrating) {
@@ -90,9 +103,6 @@ const App: React.FC = () => {
   const handlePatternSelect = (id: string) => {
     if (isVibrating) {
       stopVibration();
-      // Optional: immediately start new pattern
-      // setTimeout(() => { setSelectedPatternId(id); startVibration(); }, 50);
-      // But standard UX is usually stop when changing settings.
     }
     setSelectedPatternId(id);
   };
