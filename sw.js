@@ -1,14 +1,14 @@
 // Service Worker for PWA support
-const CACHE_NAME = 'vibecheck-v2';
+const CACHE_NAME = 'vibecheck-v3';
+// We only cache the root and critical assets. 
+// We remove explicit './index.html' to avoid 404s if the server serves root only.
 const urlsToCache = [
   './',
-  './index.html',
   './index.tsx',
   './manifest.json'
 ];
 
 self.addEventListener('install', (event) => {
-  // Force the waiting service worker to become the active service worker
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)
@@ -24,13 +24,20 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // Navigation fallback: If the user navigates to the app (e.g. opening it),
+  // serve the cached root content (index.html) even if they ask for something specific.
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      caches.match('./').then((response) => {
+        return response || fetch(event.request);
+      })
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((response) => {
-      // Return cached response if found, otherwise fetch from network
-      return response || fetch(event.request).catch(() => {
-        // Fallback or error handling could go here
-        // For now, if both fail, we just let it fail
-      });
+      return response || fetch(event.request);
     })
   );
 });
